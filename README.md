@@ -29,8 +29,7 @@ interfaces.
 ### Validated Environment
 
 - GPU: AMD Instinct MI210
-- Node used for validation: `auh7-3b-gpu-206`
-- ROCm userland reported on the validation node: `6.3.3`
+- ROCm userland validated: `6.3.3`
 - PyTorch: `2.9.1+rocm6.3`
 - Python: `3.10`
 - Compiler: ROCm `amdclang++`
@@ -50,7 +49,7 @@ interfaces.
 The clean install path that was validated is:
 
 ```bash
-export ROCM_PATH=/opt/rocm-6.3.3
+export ROCM_PATH=/path/to/rocm
 export K2_MAKE_ARGS=-j1
 python setup.py install
 ```
