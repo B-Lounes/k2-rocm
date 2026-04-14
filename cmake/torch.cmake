@@ -1,8 +1,17 @@
 
-# PYTHON_EXECUTABLE is set by pybind11.cmake
-message(STATUS "Python executable: ${PYTHON_EXECUTABLE}")
+# PYTHON_EXECUTABLE is ideally passed from setup.py or normalized by the
+# top-level CMakeLists.txt before pybind11 is included.
+set(_K2_PYTHON_EXECUTABLE "")
+if(DEFINED PYTHON_EXECUTABLE AND NOT "${PYTHON_EXECUTABLE}" STREQUAL "")
+  set(_K2_PYTHON_EXECUTABLE "${PYTHON_EXECUTABLE}")
+elseif(DEFINED Python_EXECUTABLE AND NOT "${Python_EXECUTABLE}" STREQUAL "")
+  set(_K2_PYTHON_EXECUTABLE "${Python_EXECUTABLE}")
+elseif(DEFINED Python3_EXECUTABLE AND NOT "${Python3_EXECUTABLE}" STREQUAL "")
+  set(_K2_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+endif()
+message(STATUS "Python executable: ${_K2_PYTHON_EXECUTABLE}")
 execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import os; import torch; print(os.path.dirname(torch.__file__))"
+  COMMAND "${_K2_PYTHON_EXECUTABLE}" -c "import os; import torch; print(os.path.dirname(torch.__file__))"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_DIR
 )
@@ -18,7 +27,10 @@ endif()
 # set the global CMAKE_CXX_FLAGS so that
 # k2 uses the same abi flag as PyTorch
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-if(K2_WITH_CUDA)
+if(K2_WITH_ROCM)
+  set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} ${TORCH_CXX_FLAGS}")
+  message(WARNING " CMAKE_HIP_FLAGS is ${CMAKE_HIP_FLAGS}")
+elseif(K2_WITH_CUDA)
   if(CUDA_VERSION VERSION_GREATER_EQUAL "12.0")
     string(REPLACE " " ";" MY_LIST ${CMAKE_CUDA_FLAGS})
     set(TEMP_LIST)
@@ -48,14 +60,14 @@ if(K2_WITH_CUDA)
 endif()
 
 
-execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import torch; print(torch.__version__.split('.')[0])"
+  execute_process(
+    COMMAND "${_K2_PYTHON_EXECUTABLE}" -c "import torch; print(torch.__version__.split('.')[0])"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE K2_TORCH_VERSION_MAJOR
 )
 
 execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import torch; print(torch.__version__.split('.')[1])"
+  COMMAND "${_K2_PYTHON_EXECUTABLE}" -c "import torch; print(torch.__version__.split('.')[1])"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE K2_TORCH_VERSION_MINOR
 )
@@ -64,16 +76,24 @@ set(K2_TORCH_VERSION "${K2_TORCH_VERSION_MAJOR}.${K2_TORCH_VERSION_MINOR}")
 message(STATUS "K2_TORCH_VERSION: ${K2_TORCH_VERSION}")
 
 execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import torch; print(torch.__version__)"
+  COMMAND "${_K2_PYTHON_EXECUTABLE}" -c "import torch; print(torch.__version__)"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_VERSION
 )
 
 message(STATUS "PyTorch version: ${TORCH_VERSION}")
 
-if(K2_WITH_CUDA)
+if(K2_WITH_ROCM)
   execute_process(
-    COMMAND "${PYTHON_EXECUTABLE}" -c "import torch; print(torch.version.cuda)"
+    COMMAND "${_K2_PYTHON_EXECUTABLE}" -c "import torch; print(torch.version.hip or '')"
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    OUTPUT_VARIABLE TORCH_HIP_VERSION
+  )
+  set(TORCH_CUDA_VERSION "")
+  message(STATUS "PyTorch ROCm version: ${TORCH_HIP_VERSION}")
+elseif(K2_WITH_CUDA)
+  execute_process(
+    COMMAND "${_K2_PYTHON_EXECUTABLE}" -c "import torch; print(torch.version.cuda)"
     OUTPUT_STRIP_TRAILING_WHITESPACE
     OUTPUT_VARIABLE TORCH_CUDA_VERSION
   )
@@ -104,4 +124,3 @@ if(K2_WITH_CUDA)
       INTERFACE_COMPILE_OPTIONS ""
   )
 endif()
-

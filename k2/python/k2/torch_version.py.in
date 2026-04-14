@@ -15,3 +15,7 @@ k2_torch_version = "@TORCH_VERSION@"
 #
 # An example value is "10.2".
 k2_torch_cuda_version = "@TORCH_CUDA_VERSION@"
+
+# The ROCm version used to build k2.
+# Note: It is an empty string if you used a CUDA or CPU build of PyTorch.
+k2_torch_hip_version = "@TORCH_HIP_VERSION@"

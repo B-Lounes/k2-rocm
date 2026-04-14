@@ -22,15 +22,25 @@
 
 #ifdef K2_WITH_CUDA
 
+#ifdef K2_WITH_ROCM
+#include <functional>
+#include <hipcub/hipcub.hpp>  // NOLINT
+namespace cub = hipcub;
+#else
 #include <cuda/std/functional>
+#endif
 
+#ifdef K2_ENABLE_NVTX
 #ifdef K2_USE_NVTX3
 #include <nvtx3/nvToolsExt.h>
 #else
 #include "nvToolsExt.h"
 #endif
+#endif
 
+#ifndef K2_WITH_ROCM
 #include "cub/cub.cuh"  // NOLINT
+#endif
 #endif
 
 #endif  // K2_CSRC_CUB_H_

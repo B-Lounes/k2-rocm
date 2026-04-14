@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+#include <iterator>
 #include <vector>
 
 #include "k2/csrc/array_ops.h"
@@ -29,16 +30,33 @@ namespace {
 // will be used in RaggedShape::MaxSize(int32_t axis) to call
 // cub::DeviceReduce::Max
 struct RowSplitsDiff {
+  using difference_type = std::ptrdiff_t;
+  using value_type = int32_t;
+  using pointer = const int32_t *;
+  using reference = int32_t;
+  using iterator_category = std::random_access_iterator_tag;
+
   const int32_t *row_splits_data;
   explicit RowSplitsDiff(const int32_t *row_splits)
       : row_splits_data(row_splits) {}
   // operator[] and operator+ are required by cub::DeviceReduce::Max
-  __device__ __forceinline__ int32_t operator[](int32_t i) const {
+  __host__ __device__ __forceinline__ int32_t operator[](
+      difference_type i) const {
     return row_splits_data[i + 1] - row_splits_data[i];
   }
-  __device__ __forceinline__ RowSplitsDiff operator+(int32_t n) const {
+  __host__ __device__ __forceinline__ int32_t operator*() const {
+    return (*this)[0];
+  }
+  __host__ __device__ __forceinline__ RowSplitsDiff
+  operator+(difference_type n) const {
     RowSplitsDiff tmp(*this);
     tmp.row_splits_data += n;
+    return tmp;
+  }
+  __host__ __device__ __forceinline__ RowSplitsDiff
+  operator-(difference_type n) const {
+    RowSplitsDiff tmp(*this);
+    tmp.row_splits_data -= n;
     return tmp;
   }
 };
@@ -49,7 +67,11 @@ namespace std {
 // vaule_type is required by cub::DeviceReduce::Max
 template <>
 struct iterator_traits<::RowSplitsDiff> {
+  typedef std::ptrdiff_t difference_type;
   typedef int32_t value_type;
+  typedef const int32_t *pointer;
+  typedef int32_t reference;
+  typedef random_access_iterator_tag iterator_category;
 };
 }  // namespace std
 

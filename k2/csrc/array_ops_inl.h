@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -69,6 +70,12 @@ struct PtrPtr {
 // MonotonicLowerBound to call cub::DeviceScan::InclusiveScan.
 template <typename T>
 struct ConstReversedPtr {
+  using difference_type = std::ptrdiff_t;
+  using value_type = T;
+  using pointer = const T *;
+  using reference = const T &;
+  using iterator_category = std::random_access_iterator_tag;
+
   const T *data;
 
   // data points to the last element now
@@ -86,6 +93,16 @@ struct ConstReversedPtr {
     tmp.data -= n;
     return tmp;
   }
+  __host__ __device__ __forceinline__ ConstReversedPtr
+  operator-(int32_t n) const {
+    ConstReversedPtr tmp(*this);
+    tmp.data += n;
+    return tmp;
+  }
+  __host__ __device__ __forceinline__ difference_type operator-(
+      ConstReversedPtr other) const {
+    return other.data - data;
+  }
   __host__ __device__ __forceinline__ const T &operator*() const {
     return *data;
   }
@@ -93,6 +110,12 @@ struct ConstReversedPtr {
 
 template <typename T>
 struct ReversedPtr {
+  using difference_type = std::ptrdiff_t;
+  using value_type = T;
+  using pointer = T *;
+  using reference = T &;
+  using iterator_category = std::random_access_iterator_tag;
+
   T *data;
 
   // data points to the last element now
@@ -107,6 +130,15 @@ struct ReversedPtr {
     ReversedPtr tmp(*this);
     tmp.data -= n;
     return tmp;
+  }
+  __host__ __device__ __forceinline__ ReversedPtr operator-(int32_t n) const {
+    ReversedPtr tmp(*this);
+    tmp.data += n;
+    return tmp;
+  }
+  __host__ __device__ __forceinline__ difference_type operator-(
+      ReversedPtr other) const {
+    return other.data - data;
   }
   __host__ __device__ __forceinline__ T &operator*() { return *data; }
 };
@@ -276,8 +308,18 @@ void ExclusiveSumDeref(Array1<const T *> &src, Array1<T> *dest) {
     // If this fails: you must allocate one extra element past the end of src!
     K2_CHECK_GE(region->num_bytes - byte_offset, dest_dim * src.ElementSize());
   }
+#ifdef K2_WITH_ROCM
+  Array1<T> src_values(src.Context(), dest_dim);
+  const T **src_ptr_data = src.Data();
+  T *src_values_data = src_values.Data();
+  K2_EVAL(src.Context(), dest_dim, lambda_deref_ptrs, (int32_t i)->void {
+    src_values_data[i] = *(src_ptr_data[i]);
+  });
+  ExclusiveSum(src.Context(), dest_dim, src_values_data, dest->Data());
+#else
   internal::PtrPtr<T> src_data = internal::PtrPtr<T>(src.Data());
   ExclusiveSum(src.Context(), dest_dim, src_data, dest->Data());
+#endif
 }
 
 template <typename T>

@@ -19,7 +19,11 @@
  */
 
 #ifdef K2_WITH_CUDA
+#ifdef K2_WITH_ROCM
+#include <hip/hip_cooperative_groups.h>
+#else
 #include <cooperative_groups.h>
+#endif
 #endif
 
 #include <algorithm>

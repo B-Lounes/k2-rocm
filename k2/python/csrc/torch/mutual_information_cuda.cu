@@ -19,12 +19,22 @@
  */
 
 #include <c10/cuda/CUDAStream.h>  // for getCurrentCUDAStream()
+#ifdef K2_WITH_ROCM
+#include <hip/hip_cooperative_groups.h>
+#else
 #include <cooperative_groups.h>
+#endif
 
 #include "k2/csrc/utils.h"  // for LogAdd
 #include "k2/python/csrc/torch/mutual_information.h"
 
 namespace k2 {
+
+#ifdef K2_WITH_ROCM
+__device__ __forceinline__ void K2SyncWarp() { __builtin_amdgcn_wave_barrier(); }
+#else
+__device__ __forceinline__ void K2SyncWarp() { __syncwarp(); }
+#endif
 
 /*
   Forward of mutual_information.  Each thread block computes blocks of the 'p'
@@ -265,7 +275,7 @@ __global__ void mutual_information_kernel(
 
     int s = threadIdx.x;
     for (int i = 1; i < block_S + block_T - 1; ++i) {
-      __syncwarp();
+      K2SyncWarp();
       // i is the inner iteration, which corresponds to the (s + t) indexes of
       // the elements within the block that we write.  So i == 0 writes
       // positions (s, t) == (0, 0) (but we treated i == 0 as a special case
@@ -611,7 +621,7 @@ __global__ void mutual_information_backward_kernel(
     {
       int s = threadIdx.x;
       for (int i = first_iter; i >= 0; --i) {
-        __syncwarp();
+        K2SyncWarp();
         int t = i - s;
         if (s < block_S &&
             static_cast<unsigned int>(t) < static_cast<unsigned int>(block_T)) {

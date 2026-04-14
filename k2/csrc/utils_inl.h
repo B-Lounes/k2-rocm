@@ -26,6 +26,15 @@
 #include "k2/csrc/cub.h"
 
 namespace k2 {
+
+#ifdef K2_WITH_ROCM
+template <typename T>
+using DevicePlus = std::plus<T>;
+#else
+template <typename T>
+using DevicePlus = cuda::std::plus<T>;
+#endif
+
 template <typename SrcPtr, typename DestPtr>
 void ExclusiveSum(ContextPtr c, int32_t n, const SrcPtr src, DestPtr dest) {
   K2_CHECK_GE(n, 0);
@@ -51,12 +60,12 @@ void ExclusiveSum(ContextPtr c, int32_t n, const SrcPtr src, DestPtr dest) {
     //
 
     K2_CUDA_SAFE_CALL(cub::DeviceScan::ExclusiveScan(
-        nullptr, temp_storage_bytes, src, dest, cuda::std::plus<SumType>(),
+        nullptr, temp_storage_bytes, src, dest, DevicePlus<SumType>(),
         SumType(0), n, c->GetCudaStream()));
     Array1<int8_t> d_temp_storage(c, temp_storage_bytes);
     K2_CUDA_SAFE_CALL(cub::DeviceScan::ExclusiveScan(
         d_temp_storage.Data(), temp_storage_bytes, src, dest,
-        cuda::std::plus<SumType>(), SumType(0), n, c->GetCudaStream()));
+        DevicePlus<SumType>(), SumType(0), n, c->GetCudaStream()));
   }
 }
 

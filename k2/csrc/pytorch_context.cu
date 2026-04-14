@@ -20,8 +20,13 @@
 #include <mutex>  // NOLINT
 
 #ifdef K2_WITH_CUDA
-#include "c10/cuda/CUDACachingAllocator.h"
 #include "c10/cuda/CUDAFunctions.h"
+#ifdef K2_WITH_ROCM
+#include "ATen/hip/HIPContextLight.h"
+#include "c10/hip/HIPStream.h"
+#else
+#include "ATen/cuda/CUDAContextLight.h"
+#endif
 #include "torch/cuda.h"
 #endif
 
@@ -145,9 +150,15 @@ class PytorchCudaContext : public Context {
   explicit PytorchCudaContext(int32_t gpu_id) : gpu_id_(gpu_id) {
 #ifdef K2_WITH_CUDA
     K2_CHECK_GE(gpu_id, 0);
+#ifdef K2_WITH_ROCM
+    K2_CHECK_LT(gpu_id, c10::hip::device_count());
+
+    c10::hip::set_device(gpu_id);
+#else
     K2_CHECK_LT(gpu_id, c10::cuda::device_count());
 
     c10::cuda::set_device(gpu_id);
+#endif
 
     // The internals of `lazyInitCUDA` are executed only once
     // so it is fine to invoke lazyInitCUDA() multiple times.
@@ -159,7 +170,7 @@ class PytorchCudaContext : public Context {
     at::globalContext().lazyInitCUDA();
 #endif
 
-    allocator_ = c10::cuda::CUDACachingAllocator::get();
+    allocator_ = at::cuda::getCUDADeviceAllocator();
     K2_CHECK(allocator_->raw_deleter() != nullptr);
 #else
     K2_LOG(FATAL) << "Unreachable code.";
@@ -172,8 +183,13 @@ class PytorchCudaContext : public Context {
 
   cudaStream_t GetCudaStream() const override {
 #ifdef K2_WITH_CUDA
+#ifdef K2_WITH_ROCM
+    return g_stream_override.OverrideStream(
+        c10::hip::getCurrentHIPStream(gpu_id_).stream());
+#else
     return g_stream_override.OverrideStream(
         c10::cuda::getCurrentCUDAStream(gpu_id_));
+#endif
 #else
     return cudaStream_t{};
 #endif
@@ -256,7 +272,11 @@ ContextPtr GetCudaContext(int32_t gpu_id /*= -1*/) {
 
   if (has_cuda) {
 #ifdef K2_WITH_CUDA
+#ifdef K2_WITH_ROCM
+    if (gpu_id < 0) gpu_id = c10::hip::current_device();
+#else
     if (gpu_id < 0) gpu_id = c10::cuda::current_device();
+#endif
     DeviceGuard guard(gpu_id);
     return std::make_shared<PytorchCudaContext>(gpu_id);
 #else

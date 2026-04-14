@@ -66,6 +66,9 @@ static constexpr const char *kTorchVersion = "@TORCH_VERSION@";
 // Which CUDA version PyTorch is using, e.g., 10.1
 static constexpr const char *kTorchCudaVersion = "@TORCH_CUDA_VERSION@";
 
+// Which ROCm version PyTorch is using, e.g., 6.3.x
+static constexpr const char *kTorchHipVersion = "@TORCH_HIP_VERSION@";
+
 #ifndef K2_WITH_CUDA
 #cmakedefine K2_WITH_CUDA
 #endif

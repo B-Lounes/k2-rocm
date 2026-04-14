@@ -20,7 +20,14 @@
 #include <random>
 #include <type_traits>
 
-#ifdef K2_WITH_CUDA
+#ifdef K2_WITH_ROCM
+#include <hiprand/hiprand_kernel.h>  // NOLINT
+#define curandStatePhilox4_32_10_t hiprandStatePhilox4_32_10_t
+#define curand_init hiprand_init
+#define curand_uniform4 hiprand_uniform4
+#define curand_uniform2_double hiprand_uniform2_double
+#define curand4 hiprand4
+#elif defined(K2_WITH_CUDA)
 #include "curand.h"         // NOLINT
 #include "curand_kernel.h"  // NOLINT
 #endif

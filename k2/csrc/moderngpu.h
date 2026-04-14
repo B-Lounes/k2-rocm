@@ -20,11 +20,21 @@
 #define K2_CSRC_MODERNGPU_H_
 
 #ifdef K2_WITH_CUDA
+#if defined(K2_WITH_ROCM) && !defined(__CUDACC__)
+#define K2_UNDEF_CUDACC_AFTER_MODERNGPU
+#define __CUDACC__ 1
+#endif
+
 #include "moderngpu/context.hxx"
 #include "moderngpu/kernel_load_balance.hxx"
 #include "moderngpu/kernel_mergesort.hxx"
 #include "moderngpu/kernel_segsort.hxx"
 #include "moderngpu/kernel_sortedsearch.hxx"
+
+#ifdef K2_UNDEF_CUDACC_AFTER_MODERNGPU
+#undef __CUDACC__
+#undef K2_UNDEF_CUDACC_AFTER_MODERNGPU
+#endif
 #endif
 
 #endif  // K2_CSRC_MODERNGPU_H_

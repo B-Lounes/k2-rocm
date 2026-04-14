@@ -19,6 +19,7 @@ endif()
 if(NOT K2_WITH_CUDA)
   transform(OUTPUT_VARIABLE k2_srcs SRCS ${k2_srcs})
 endif()
+k2_set_gpu_source_language(${k2_srcs})
 
 if(WIN32)
   # It throws the following error on Windows
@@ -43,7 +44,7 @@ endif()
 
 target_include_directories(_k2 PRIVATE ${CMAKE_SOURCE_DIR})
 target_include_directories(_k2 PRIVATE ${CMAKE_BINARY_DIR})
-set_target_properties(_k2 PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+k2_enable_gpu_separable_compilation(_k2)
 
 if(NOT WIN32)
   target_link_libraries(_k2 PRIVATE "-Wl,-rpath,${k2_rpath_origin}/k2/${CMAKE_INSTALL_LIBDIR}")

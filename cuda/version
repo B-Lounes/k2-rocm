@@ -1,0 +1,24 @@
+#pragma once
+
+#ifdef K2_WITH_ROCM
+#include <hip/hip_version.h>
+
+#ifndef CUDA_VERSION
+#define CUDA_VERSION (HIP_VERSION_MAJOR * 1000 + HIP_VERSION_MINOR * 10)
+#endif
+
+#ifndef CCCL_MAJOR_VERSION
+#define CCCL_MAJOR_VERSION 2
+#endif
+
+#ifndef CCCL_MINOR_VERSION
+#define CCCL_MINOR_VERSION 3
+#endif
+
+#ifndef CCCL_PATCH_VERSION
+#define CCCL_PATCH_VERSION 2
+#endif
+
+#else
+#include_next <cuda/version>
+#endif

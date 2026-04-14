@@ -31,9 +31,32 @@ set(CMAKE_DISABLE_FIND_PACKAGE_MKL TRUE)
 
 set(languages CXX)
 set(_K2_WITH_CUDA ON)
+set(_K2_WITH_ROCM OFF)
 
 find_program(K2_HAS_NVCC nvcc)
-if(NOT K2_HAS_NVCC AND "$ENV{CUDACXX}" STREQUAL "")
+find_program(K2_HAS_HIPCC hipcc HINTS ENV ROCM_PATH PATH_SUFFIXES bin)
+find_program(
+  K2_HIP_CLANG
+  NAMES amdclang++ clang++
+  HINTS
+    ENV ROCM_PATH
+    /opt/rocm
+    /opt/rocm-6.3.3
+  PATH_SUFFIXES
+    bin
+    lib/llvm/bin
+)
+
+if(DEFINED K2_WITH_ROCM)
+  set(_K2_WITH_ROCM ${K2_WITH_ROCM})
+elseif(NOT K2_HAS_NVCC AND (K2_HAS_HIPCC OR NOT "$ENV{ROCM_PATH}" STREQUAL ""))
+  message(STATUS "No NVCC detected and HIPCC is available. Enable ROCm support")
+  set(_K2_WITH_ROCM ON)
+endif()
+
+if(_K2_WITH_ROCM)
+  set(_K2_WITH_CUDA ON)
+elseif(NOT K2_HAS_NVCC AND "$ENV{CUDACXX}" STREQUAL "")
   message(STATUS "No NVCC detected. Disable CUDA support")
   set(_K2_WITH_CUDA OFF)
 endif()
@@ -45,7 +68,27 @@ if(APPLE OR (DEFINED K2_WITH_CUDA AND NOT K2_WITH_CUDA))
   endif()
 endif()
 
-if(_K2_WITH_CUDA)
+if(_K2_WITH_CUDA AND _K2_WITH_ROCM)
+  if(NOT DEFINED CMAKE_HIP_COMPILER AND K2_HIP_CLANG)
+    set(CMAKE_HIP_COMPILER ${K2_HIP_CLANG} CACHE FILEPATH "HIP compiler" FORCE)
+  endif()
+  if(NOT DEFINED CMAKE_HIP_COMPILER_ROCM_ROOT)
+    if(DEFINED ENV{ROCM_PATH} AND NOT "$ENV{ROCM_PATH}" STREQUAL "")
+      set(CMAKE_HIP_COMPILER_ROCM_ROOT $ENV{ROCM_PATH} CACHE PATH "ROCm root" FORCE)
+    elseif(EXISTS "/opt/rocm")
+      set(CMAKE_HIP_COMPILER_ROCM_ROOT "/opt/rocm" CACHE PATH "ROCm root" FORCE)
+    endif()
+  endif()
+  if(NOT DEFINED CMAKE_HIP_ARCHITECTURES)
+    if(DEFINED ENV{PYTORCH_ROCM_ARCH} AND NOT "$ENV{PYTORCH_ROCM_ARCH}" STREQUAL "")
+      string(REPLACE "," ";" K2_HIP_ARCHS "$ENV{PYTORCH_ROCM_ARCH}")
+      set(CMAKE_HIP_ARCHITECTURES ${K2_HIP_ARCHS} CACHE STRING "HIP GPU architectures" FORCE)
+    else()
+      set(CMAKE_HIP_ARCHITECTURES gfx90a CACHE STRING "HIP GPU architectures" FORCE)
+    endif()
+  endif()
+  set(languages ${languages} HIP)
+elseif(_K2_WITH_CUDA)
   set(languages ${languages} CUDA)
 endif()
 
@@ -81,6 +124,7 @@ option(BUILD_SHARED_LIBS "Whether to build shared or static lib" ON)
 option(K2_USE_PYTORCH "Whether to build with PyTorch" ON)
 option(K2_ENABLE_BENCHMARK "Whether to enable benchmark" ON)
 option(K2_WITH_CUDA "Whether to build k2 with CUDA" ${_K2_WITH_CUDA})
+option(K2_WITH_ROCM "Whether to build k2 with ROCm/HIP" ${_K2_WITH_ROCM})
 option(K2_ENABLE_NVTX "Whether to build k2 with the NVTX library" ON)
 option(K2_ENABLE_TESTS "Whether to build tests" ON)
 
@@ -94,6 +138,11 @@ option(K2_BUILD_FOR_ALL_ARCHS "Whether to build k2 for all GPU architectures" OF
 
 if(NOT K2_WITH_CUDA)
   message(STATUS "Set K2_ENABLE_NVTX to OFF since K2_WITH_CUDA is OFF")
+  set(K2_ENABLE_NVTX OFF CACHE BOOL "" FORCE)
+endif()
+
+if(K2_WITH_ROCM)
+  message(STATUS "Set K2_ENABLE_NVTX to OFF since K2_WITH_ROCM is ON")
   set(K2_ENABLE_NVTX OFF CACHE BOOL "" FORCE)
 endif()
 
@@ -199,7 +248,20 @@ execute_process(COMMAND
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 14 CACHE STRING "The C++ version to be used.")
 endif()
+if(K2_WITH_ROCM AND CMAKE_CXX_STANDARD LESS 17)
+  message(STATUS "ROCm builds with current PyTorch require C++17; bumping CMAKE_CXX_STANDARD to 17")
+  set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ version to be used." FORCE)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(K2_WITH_ROCM)
+  set(CMAKE_HIP_STANDARD ${CMAKE_CXX_STANDARD})
+  set(CMAKE_HIP_STANDARD_REQUIRED ON)
+  set(CMAKE_HIP_EXTENSIONS OFF)
+  add_compile_definitions(C10_CUDA_NO_CMAKE_CONFIGURE_FILE)
+  message(STATUS "HIP architectures: ${CMAKE_HIP_ARCHITECTURES}")
+endif()
 
 message(STATUS "C++ Standard version: ${CMAKE_CXX_STANDARD}")
 
@@ -224,7 +286,7 @@ endif()
 # ========= Settings for CUB begin =========
 # the following settings are modified from cub/CMakeLists.txt
 
-if(K2_WITH_CUDA)
+if(K2_WITH_CUDA AND NOT K2_WITH_ROCM)
   # Force CUDA C++ standard to be the same as the C++ standard used.
   #
   # Now, CMake is unaligned with reality on standard versions: https://gitlab.kitware.com/cmake/cmake/issues/18597
@@ -323,6 +385,12 @@ if(K2_WITH_CUDA)
 # ========= Settings for CUB end=========
 endif()
 
+if(K2_WITH_ROCM)
+  string(APPEND CMAKE_HIP_FLAGS " --offload-arch=${CMAKE_HIP_ARCHITECTURES}")
+  string(APPEND CMAKE_HIP_FLAGS " -include ${CMAKE_SOURCE_DIR}/k2/csrc/rocm.h")
+  message(STATUS "CMAKE_HIP_FLAGS: ${CMAKE_HIP_FLAGS}")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 find_package(Valgrind)
 if(Valgrind_FOUND)
@@ -334,6 +402,23 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
+set(_K2_PYTHON_EXECUTABLE "")
+if(DEFINED PYTHON_EXECUTABLE AND NOT "${PYTHON_EXECUTABLE}" STREQUAL "")
+  set(_K2_PYTHON_EXECUTABLE "${PYTHON_EXECUTABLE}")
+elseif(DEFINED Python_EXECUTABLE AND NOT "${Python_EXECUTABLE}" STREQUAL "")
+  set(_K2_PYTHON_EXECUTABLE "${Python_EXECUTABLE}")
+elseif(DEFINED Python3_EXECUTABLE AND NOT "${Python3_EXECUTABLE}" STREQUAL "")
+  set(_K2_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+endif()
+
+if(NOT "${_K2_PYTHON_EXECUTABLE}" STREQUAL "")
+  set(PYTHON_EXECUTABLE ${_K2_PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FORCE)
+  set(Python_EXECUTABLE ${_K2_PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FORCE)
+  set(Python3_EXECUTABLE ${_K2_PYTHON_EXECUTABLE} CACHE FILEPATH "Python executable" FORCE)
+  get_filename_component(_K2_PYTHON_BINDIR "${_K2_PYTHON_EXECUTABLE}" DIRECTORY)
+  get_filename_component(Python_ROOT_DIR "${_K2_PYTHON_BINDIR}/.." ABSOLUTE)
+  set(PYBIND11_FINDPYTHON ON)
+endif()
 
 include(pybind11)
 if(K2_USE_PYTORCH)
@@ -350,11 +435,16 @@ if(K2_WITH_CUDA)
   add_definitions(-DK2_WITH_CUDA)
 endif()
 
+if(K2_WITH_ROCM)
+  add_definitions(-DK2_WITH_ROCM)
+  add_definitions(-DUSE_ROCM)
+endif()
+
 if(WIN32)
   add_definitions(-DNOMINMAX) # Otherwise, std::max() and std::min() won't work
 endif()
 
-if(K2_WITH_CUDA AND CUDA_VERSION VERSION_LESS 11.0)
+if(K2_WITH_CUDA AND NOT K2_WITH_ROCM AND CUDA_VERSION VERSION_LESS 11.0)
   # CUB is included in CUDA toolkit 11.0 and above
   include(cub)
 endif()
@@ -380,6 +470,10 @@ endif()
 if(NOT WIN32)
   string(APPEND CMAKE_CXX_FLAGS " -Wno-unused-variable ")
   string(APPEND CMAKE_CXX_FLAGS " -Wno-strict-overflow ")
+  if(K2_WITH_ROCM)
+    string(APPEND CMAKE_HIP_FLAGS " -Wno-unused-variable ")
+    string(APPEND CMAKE_HIP_FLAGS " -Wno-strict-overflow ")
+  endif()
 endif()
 
 if(WIN32)
@@ -441,6 +535,21 @@ endif()
 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 message(STATUS "CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
+message(STATUS "CMAKE_HIP_FLAGS: ${CMAKE_HIP_FLAGS}")
+
+function(k2_set_gpu_source_language)
+  if(K2_WITH_ROCM)
+    set_source_files_properties(${ARGN} PROPERTIES LANGUAGE HIP)
+  endif()
+endfunction()
+
+function(k2_enable_gpu_separable_compilation target_name)
+  if(K2_WITH_ROCM)
+    set_target_properties(${target_name} PROPERTIES HIP_SEPARABLE_COMPILATION ON)
+  elseif(K2_WITH_CUDA)
+    set_target_properties(${target_name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  endif()
+endfunction()
 
 include(GNUInstallDirs)
 

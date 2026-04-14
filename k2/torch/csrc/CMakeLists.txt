@@ -20,6 +20,7 @@ set(k2_torch_srcs
 if(NOT K2_WITH_CUDA)
   transform(OUTPUT_VARIABLE k2_torch_srcs SRCS ${k2_torch_srcs})
 endif()
+k2_set_gpu_source_language(${k2_torch_srcs})
 
 add_library(k2_torch ${k2_torch_srcs})
 target_link_libraries(k2_torch PUBLIC ${TORCH_LIBRARIES} context)
@@ -46,7 +47,8 @@ if(K2_ENABLE_TESTS)
     get_filename_component(name ${source} NAME_WE)
     set(target_name "cu_k2_torch_${name}")
     add_executable(${target_name} "${source}")
-    set_target_properties(${target_name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    k2_set_gpu_source_language("${source}")
+    k2_enable_gpu_separable_compilation(${target_name})
     target_link_libraries(${target_name} k2_torch gtest gtest_main)
 
     # NOTE: We set the working directory here so that
@@ -71,6 +73,7 @@ if(NOT K2_WITH_CUDA)
   transform(OUTPUT_VARIABLE k2_torch_api_srcs SRCS ${k2_torch_api_srcs})
 endif()
 add_library(k2_torch_api ${k2_torch_api_srcs})
+k2_set_gpu_source_language(${k2_torch_api_srcs})
 target_link_libraries(k2_torch_api PUBLIC k2_torch)
 
 if(K2_ENABLE_TESTS)

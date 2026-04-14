@@ -18,6 +18,9 @@ def is_windows():
 
 
 def with_cuda():
+    if with_rocm():
+        return False
+
     if shutil.which('nvcc') is None:
         return False
 
@@ -29,6 +32,17 @@ def with_cuda():
         return False
 
     return True
+
+
+def with_rocm():
+    if is_macos():
+        return False
+
+    cmake_args = os.environ.get('K2_CMAKE_ARGS', '')
+    if 'K2_WITH_ROCM=ON' in cmake_args:
+        return True
+
+    return getattr(torch.version, 'hip', None) is not None
 
 
 def get_pytorch_version():
@@ -46,6 +60,10 @@ def get_cuda_version():
                 f'PyTorch is built with CUDA version: {cuda_version}.\n' \
                 f'The current running CUDA version is: {running_cuda_version}'
     return cuda_version
+
+
+def get_rocm_version():
+    return torch.version.hip
 
 
 def is_for_pypi():
@@ -71,7 +89,11 @@ def get_package_version():
     #
     default_cuda_version = '10.1'  # CUDA 10.1
 
-    if with_cuda():
+    if with_rocm():
+        rocm_version = get_rocm_version()
+        pytorch_version = get_pytorch_version()
+        local_version = f'+rocm{rocm_version}.torch{pytorch_version}'
+    elif with_cuda():
         cuda_version = get_cuda_version()
         if is_for_pypi() and default_cuda_version == cuda_version:
             cuda_version = ''

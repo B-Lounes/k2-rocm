@@ -1,7 +1,8 @@
 function(k2_add_benchmark source)
   get_filename_component(name ${source} NAME_WE)
   add_executable(${name} ${source})
-  set_target_properties(${name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  k2_set_gpu_source_language(${source})
+  k2_enable_gpu_separable_compilation(${name})
   target_link_libraries(${name} PRIVATE benchmark)
 endfunction()
 
@@ -11,6 +12,7 @@ if(NOT K2_WITH_CUDA)
 endif()
 
 add_library(benchmark ${benchmark_main_srcs})
+k2_set_gpu_source_language(${benchmark_main_srcs})
 target_link_libraries(benchmark PUBLIC context)
 target_link_libraries(benchmark PUBLIC test_utils)
 target_include_directories(benchmark PUBLIC ${CMAKE_BINARY_DIR})

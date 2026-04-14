@@ -43,7 +43,7 @@
 
 #include "k2/csrc/macros.h"
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDACC__) || defined(__HIPCC__)
 #define K2_CUDA_HOSTDEV __host__ __device__
 #else
 #define K2_CUDA_HOSTDEV
@@ -156,7 +156,7 @@ class Logger {
 
     if (cur_level_ <= level_) {
       printf("%s:%u:%s ", filename, line_num, func_name);
-#if defined(__CUDA_ARCH__)
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
       printf("block:[%u,%u,%u], thread: [%u,%u,%u] ", blockIdx.x, blockIdx.y,
              blockIdx.z, threadIdx.x, threadIdx.y, threadIdx.z);
 #endif
@@ -179,7 +179,7 @@ class Logger {
     )";
     printf("\n");
     if (level_ == FATAL) {
-#if defined(__CUDA_ARCH__)
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
       // this is usually caused by one of the K2_CHECK macros and the detailed
       // error messages should have already been printed by the macro, so we
       // use an arbitrary string here.
@@ -322,7 +322,7 @@ inline int64_t MaxCpuMemAllocate() {
 }
 
 inline K2_CUDA_HOSTDEV LogLevel GetCurrentLogLevel() {
-#if defined(__CUDA_ARCH__)
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
   return DEBUG;
 #else
   static LogLevel log_level = INFO;

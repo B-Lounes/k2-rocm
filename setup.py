@@ -177,6 +177,40 @@ class BuildExtension(build_ext):
         if "PYTHON_EXECUTABLE" not in cmake_args:
             print(f"Setting PYTHON_EXECUTABLE to {sys.executable}")
             cmake_args += f" -DPYTHON_EXECUTABLE={sys.executable}"
+            cmake_args += f" -DPython_EXECUTABLE={sys.executable}"
+            cmake_args += f" -DPython3_EXECUTABLE={sys.executable}"
+
+        try:
+            import torch
+
+            if (
+                torch.version.hip is not None
+                and "K2_WITH_ROCM=" not in cmake_args
+                and "K2_WITH_CUDA=OFF" not in cmake_args
+            ):
+                cmake_args += " -DK2_WITH_ROCM=ON -DK2_WITH_CUDA=ON"
+                rocm_root = (
+                    os.environ.get("ROCM_PATH")
+                    or os.environ.get("ROCM_HOME")
+                    or "/opt/rocm"
+                )
+                hip_compiler_candidates = (
+                    os.path.join(rocm_root, "bin", "amdclang++"),
+                    os.path.join(rocm_root, "lib", "llvm", "bin", "clang++"),
+                )
+                hip_compiler = next(
+                    (p for p in hip_compiler_candidates if os.path.exists(p)),
+                    None,
+                )
+                if hip_compiler and "CMAKE_HIP_COMPILER=" not in cmake_args:
+                    cmake_args += f" -DCMAKE_HIP_COMPILER={hip_compiler}"
+                if (
+                    os.path.exists(rocm_root)
+                    and "CMAKE_HIP_COMPILER_ROCM_ROOT=" not in cmake_args
+                ):
+                    cmake_args += f" -DCMAKE_HIP_COMPILER_ROCM_ROOT={rocm_root}"
+        except Exception:
+            pass
 
         cmake_args += extra_cmake_args
 

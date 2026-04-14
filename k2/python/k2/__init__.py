@@ -2,6 +2,7 @@ from pathlib import Path as _Path
 
 import torch  # noqa
 from .torch_version import k2_torch_cuda_version
+from .torch_version import k2_torch_hip_version
 from .torch_version import k2_torch_version
 
 if torch.__version__.split("+")[0] != k2_torch_version.split("+")[0]:
@@ -18,6 +19,16 @@ if (
     raise ImportError(
         f"k2 was built using CUDA {k2_torch_cuda_version}\n"
         f"But you are using CUDA {torch.version.cuda} to run it."
+    )
+
+if (
+    k2_torch_hip_version != ""
+    and getattr(torch.version, "hip", None) is not None
+    and torch.version.hip != k2_torch_hip_version
+):
+    raise ImportError(
+        f"k2 was built using ROCm {k2_torch_hip_version}\n"
+        f"But you are using ROCm {torch.version.hip} to run it."
     )
 
 from _k2 import DeterminizeWeightPushingType

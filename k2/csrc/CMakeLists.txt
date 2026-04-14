@@ -14,6 +14,7 @@ set(log_srcs log.cu)
 if(NOT K2_WITH_CUDA)
   transform(OUTPUT_VARIABLE log_srcs SRCS ${log_srcs})
 endif()
+k2_set_gpu_source_language(${log_srcs})
 add_library(k2_log ${log_srcs})
 if(UNIX AND NOT APPLE AND NOT K2_WITH_CUDA)
   # Without linking to libpthread.so, it throws
@@ -107,11 +108,12 @@ target_compile_definitions(context PUBLIC K2_TORCH_VERSION_MINOR=${K2_TORCH_VERS
 target_compile_definitions(context PUBLIC CUB_WRAPPED_NAMESPACE=k2)
 target_compile_definitions(context PUBLIC THRUST_NS_QUALIFIER=thrust)
 
-set_target_properties(context PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+k2_set_gpu_source_language(${context_srcs})
+k2_enable_gpu_separable_compilation(context)
 set_target_properties(context PROPERTIES OUTPUT_NAME "k2context")
 
 # lib deps
-if(K2_WITH_CUDA AND CUDA_VERSION VERSION_LESS 11.0)
+  if(K2_WITH_CUDA AND NOT K2_WITH_ROCM AND CUDA_VERSION VERSION_LESS 11.0)
   target_link_libraries(context PUBLIC cub)
 endif()
 
@@ -156,6 +158,7 @@ if(K2_ENABLE_TESTS OR K2_ENABLE_BENCHMARK)
   endif()
 
   add_library(test_utils ${test_utils_srcs})
+  k2_set_gpu_source_language(${test_utils_srcs})
   target_link_libraries(test_utils PUBLIC context gtest)
 endif()
 
@@ -205,7 +208,8 @@ if(K2_ENABLE_TESTS)
     get_filename_component(name ${source} NAME_WE)
     set(target_name "cu_${name}")
     add_executable(${target_name} "${source}")
-    set_target_properties(${target_name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    k2_set_gpu_source_language("${source}")
+    k2_enable_gpu_separable_compilation(${target_name})
     target_link_libraries(${target_name}
       PRIVATE
       context
