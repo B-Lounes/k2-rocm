@@ -11,6 +11,95 @@
 
 # k2
 
+## Experimental ROCm/HIP Port
+
+This repository includes an experimental ROCm/HIP port of `k2` for AMD GPUs.
+The goal of this port is to make the existing CUDA-oriented `k2` codebase build
+and run on ROCm with minimal changes to the higher-level Python and PyTorch
+interfaces.
+
+### Scope
+
+- Build `k2` with ROCm/HIP while keeping the existing `torch.cuda`-style Python
+  API expected by downstream projects.
+- Preserve the main `k2` Python extension layout and `setup.py install`
+  workflow.
+- Keep the original CUDA path intact while adding a ROCm-specific build path.
+
+### Validated Environment
+
+- GPU: AMD Instinct MI210
+- Node used for validation: `auh7-3b-gpu-206`
+- ROCm userland reported on the validation node: `6.3.3`
+- PyTorch: `2.9.1+rocm6.3`
+- Python: `3.10`
+- Compiler: ROCm `amdclang++`
+
+### Main Porting Areas
+
+- CMake and `setup.py` changes to detect ROCm PyTorch builds and configure a
+  HIP toolchain.
+- CUDA-to-HIP compatibility shims for runtime headers and common CUDA APIs.
+- GPU source adaptations in `k2/csrc` and `k2/python/csrc` to compile with HIP.
+- CUB/rocPRIM and iterator-related fixes needed by GPU kernels and reductions.
+- Packaging fixes so `python setup.py install` produces a usable installed
+  package in a ROCm PyTorch environment.
+
+### Build Notes
+
+The clean install path that was validated is:
+
+```bash
+export ROCM_PATH=/opt/rocm-6.3.3
+export K2_MAKE_ARGS=-j1
+python setup.py install
+```
+
+Notes:
+
+- `-j1` was used for a conservative, stable build during validation.
+- The build compiles the `k2/torch/bin` targets as part of the normal install,
+  which increases build time substantially.
+- ROCm still uses the `torch.cuda` API surface in PyTorch, so Python-side code
+  does not need to switch to a different device namespace.
+
+### Validation Summary
+
+The installed ROCm build was validated with:
+
+- `import k2`
+- `python -m k2.version`
+- `k2.swoosh_l(...)` on GPU
+- `k2.linear_fsa(...)` on GPU
+- `k2.arc_sort(...)` on GPU
+- `k2.ctc_topo(...)` on GPU
+- `k2.mutual_information_recursion(...)` forward and backward on GPU
+
+### Numerical Checks
+
+CPU vs ROCm results from the current validation:
+
+- `linear_fsa`: exact match
+- `ctc_topo`: exact match for arcs and scores
+- `swoosh_l`: max absolute difference `2.98e-08`
+- `mutual_information_recursion`:
+  - forward max absolute difference `0.0`
+  - gradient max absolute differences about `6e-07`
+
+These results are consistent with expected floating-point backend variance for
+the tested kernels. This is good evidence that the port is numerically healthy
+for the exercised paths, but it is not yet a full-library equivalence proof.
+
+### Current Limitations
+
+- This is not a full upstream test-suite validation.
+- Validation was performed on a ROCm `6.3.3` userland, not on a direct ROCm
+  `6.6.3` build target.
+- The port has not yet been benchmarked against the original NVIDIA/CUDA path
+  for performance.
+- Multi-node and long-running production training validation were not part of
+  this repository-level verification.
+
 The vision of k2 is to be able to seamlessly integrate Finite State Automaton
 (FSA) and Finite State Transducer (FST) algorithms into autograd-based machine
 learning toolkits like PyTorch and TensorFlow.  For speech recognition
